@@ -8,8 +8,6 @@ import java.time.LocalDate;
 import java.util.List;
 
 public interface INotificacionService {
-
-    // Notificaciones por correo
     void enviarNotificacionVencimiento(Cuota cuota);
 
     void enviarNotificacionPagoConfirmado(Cuota cuota);
@@ -18,17 +16,14 @@ public interface INotificacionService {
 
     void enviarNotificacionRecordatorio(LocalDate fecha);
 
-    // Notificaciones internas
     void crearNotificacionSistema(String tipo, String mensaje, Long referenciaId);
 
-    // Gestión de notificaciones
     List<NotificacionDto> obtenerNotificacionesPendientes();
 
     void marcarComoLeida(Long idNotificacion);
 
     void eliminarNotificacion(Long idNotificacion);
 
-    // Programación de notificaciones
     void programarNotificacionesDiarias();
 
     void programarNotificacionesMensuales();

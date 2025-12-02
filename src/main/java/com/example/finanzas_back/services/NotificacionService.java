@@ -30,7 +30,6 @@ public class NotificacionService implements INotificacionService {
     @Autowired
     private ModelMapper modelMapper;
 
-    // En producción, esto sería una tabla en la BD
     private List<NotificacionDto> notificacionesSistema = new ArrayList<>();
 
     @Override
@@ -45,12 +44,9 @@ public class NotificacionService implements INotificacionService {
             String email = cliente.getEmail();
 
             if (email != null && !email.isEmpty()) {
-                // Crear contenido del email
                 String asunto = "Recordatorio: Cuota #" + cuota.getNumero_cuota() + " próxima a vencer";
                 String mensaje = construirMensajeVencimiento(cuota, cliente);
 
-                // En producción, aquí se integraría con un servicio de email
-                // Por ahora, solo creamos la notificación en el sistema
                 crearNotificacionSistema("email", "Notificación de vencimiento enviada a " + email,
                         cuota.getId_cuota());
 
@@ -116,23 +112,19 @@ public class NotificacionService implements INotificacionService {
     @Override
     public void enviarNotificacionRecordatorio(LocalDate fecha) {
         try {
-            // Buscar cuotas que vencen en 3 días
             LocalDate fechaVencimiento = fecha.plusDays(3);
 
             List<Cuota> cuotasPorVencer = cuotaRepository.findByFechaVencimientoBetween(
                     fecha, fechaVencimiento);
 
-            // Filtrar solo cuotas pendientes
             cuotasPorVencer = cuotasPorVencer.stream()
                     .filter(c -> "pendiente".equals(c.getEstado()))
                     .collect(Collectors.toList());
 
-            // Enviar notificación para cada cuota
             for (Cuota cuota : cuotasPorVencer) {
                 enviarNotificacionVencimiento(cuota);
             }
 
-            // Crear notificación de sistema
             crearNotificacionSistema("sistema",
                     "Se enviaron " + cuotasPorVencer.size() + " recordatorios de vencimiento",
                     null);
@@ -155,7 +147,6 @@ public class NotificacionService implements INotificacionService {
         notificacion.setReferenciaId(referenciaId);
         notificacion.setPrioridad("media");
 
-        // Generar ID (en producción sería autoincremental de BD)
         notificacion.setIdNotificacion(System.currentTimeMillis());
 
         notificacionesSistema.add(notificacion);
@@ -163,7 +154,6 @@ public class NotificacionService implements INotificacionService {
 
     @Override
     public List<NotificacionDto> obtenerNotificacionesPendientes() {
-        // Filtrar notificaciones no leídas
         return notificacionesSistema.stream()
                 .filter(n -> !n.getLeida())
                 .sorted((n1, n2) -> n2.getFechaEnvio().compareTo(n1.getFechaEnvio()))
@@ -195,17 +185,12 @@ public class NotificacionService implements INotificacionService {
     public void programarNotificacionesMensuales() {
         System.out.println("Ejecutando notificaciones mensuales...");
 
-        // Aquí se podrían programar notificaciones mensuales como:
-        // - Resumen mensual para clientes
-        // - Reportes para administradores
-        // - Recordatorios de mantenimiento
 
         crearNotificacionSistema("sistema",
                 "Notificaciones mensuales procesadas para " + LocalDate.now().getMonth(),
                 null);
     }
 
-    // Métodos auxiliares privados
     private String construirMensajeVencimiento(Cuota cuota, Cliente cliente) {
         StringBuilder mensaje = new StringBuilder();
         mensaje.append("Estimado/a ").append(cliente.getNombres()).append(" ").append(cliente.getApellidos()).append(",\n\n");
@@ -252,7 +237,6 @@ public class NotificacionService implements INotificacionService {
     }
 
     private Double calcularCuotaAproximada(Credito credito) {
-        // Cálculo simplificado de cuota
         Double tasaMensual = credito.getTasa_anual() / 12 / 100;
         Integer plazo = credito.getPlazo_meses();
         Double monto = credito.getMonto_principal();

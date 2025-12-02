@@ -28,7 +28,6 @@ public class ValidacionService implements IValidacionService {
     @Autowired
     private ModelMapper modelMapper;
 
-    // Constantes de validación
     private static final Integer EDAD_MINIMA = 18;
     private static final Integer EDAD_MAXIMA = 70;
     private static final Double PORCENTAJE_ENDEUDAMIENTO_MAXIMO = 0.40; // 40%
@@ -43,12 +42,10 @@ public class ValidacionService implements IValidacionService {
     public ResultadoValidacionDto validarCliente(ClienteDto cliente) {
         ResultadoValidacionDto resultado = new ResultadoValidacionDto(true, "Cliente válido");
 
-        // Validar DNI
         if (cliente.getDni() == null || cliente.getDni().toString().length() != 8) {
             resultado.agregarError("DNI inválido. Debe tener 8 dígitos");
         }
 
-        // Validar edad
         if (cliente.getFecha_nacimiento() != null) {
             int edad = Period.between(cliente.getFecha_nacimiento(), LocalDate.now()).getYears();
             if (edad < EDAD_MINIMA) {
@@ -59,19 +56,16 @@ public class ValidacionService implements IValidacionService {
             }
         }
 
-        // Validar ingreso
         if (cliente.getIngreso_mensual() == null || cliente.getIngreso_mensual() <= 0) {
             resultado.agregarError("Ingreso mensual inválido");
         } else if (cliente.getIngreso_mensual() < 1500) {
             resultado.agregarAdvertencia("Ingreso mensual bajo para crédito hipotecario");
         }
 
-        // Validar email
         if (cliente.getEmail() == null || !cliente.getEmail().contains("@")) {
             resultado.agregarError("Email inválido");
         }
 
-        // Validar teléfono
         if (cliente.getTelefono() != null && cliente.getTelefono().toString().length() != 9) {
             resultado.agregarAdvertencia("Teléfono puede ser inválido");
         }
@@ -91,7 +85,6 @@ public class ValidacionService implements IValidacionService {
         Double ingreso = cliente.getIngreso_mensual();
         Double cuotaMaxima = ingreso * PORCENTAJE_ENDEUDAMIENTO_MAXIMO;
 
-        // Calcular puntaje de riesgo
         Integer puntaje = 0;
 
         if (montoCuota > cuotaMaxima) {
@@ -100,7 +93,6 @@ public class ValidacionService implements IValidacionService {
             puntaje += 50;
         }
 
-        // Considerar número de dependientes
         if (cliente.getNum_dependientes() != null && cliente.getNum_dependientes() > 3) {
             resultado.agregarAdvertencia("Número alto de dependientes puede afectar capacidad de pago");
             puntaje += 10;
@@ -114,11 +106,9 @@ public class ValidacionService implements IValidacionService {
     public ResultadoValidacionDto validarHistorialCrediticio(Long idCliente) {
         ResultadoValidacionDto resultado = new ResultadoValidacionDto(true, "Historial crediticio válido");
 
-        // Buscar créditos anteriores del cliente
         List<Credito> creditosCliente = creditoRepository.findByClienteId(idCliente);
 
         if (creditosCliente != null && !creditosCliente.isEmpty()) {
-            // Contar créditos con problemas
             long creditosVencidos = creditosCliente.stream()
                     .filter(c -> "vencido".equals(c.getEstado()))
                     .count();
@@ -127,10 +117,8 @@ public class ValidacionService implements IValidacionService {
                     .filter(c -> "cancelado".equals(c.getEstado()))
                     .count();
 
-            // Calcular puntaje basado en historial
             Integer puntaje = 0;
 
-            // CORRECCIÓN: Convertir long a int
             if (creditosVencidos > 0) {
                 resultado.agregarAdvertencia("El cliente tiene " + creditosVencidos + " crédito(s) vencido(s)");
                 puntaje += (int) creditosVencidos * 20;
@@ -141,7 +129,6 @@ public class ValidacionService implements IValidacionService {
                 puntaje += 30;
             }
 
-            // Si hay muchos créditos activos
             long creditosActivos = creditosCliente.stream()
                     .filter(c -> "activo".equals(c.getEstado()))
                     .count();
@@ -166,7 +153,6 @@ public class ValidacionService implements IValidacionService {
     public ResultadoValidacionDto validarCredito(CreditoDto credito) {
         ResultadoValidacionDto resultado = new ResultadoValidacionDto(true, "Crédito válido");
 
-        // Validar monto
         ResultadoValidacionDto validacionMonto = validarMontoCredito(credito, credito.getClientedto());
         if (!validacionMonto.getValido()) {
             resultado.getErrores().addAll(validacionMonto.getErrores());
@@ -174,27 +160,23 @@ public class ValidacionService implements IValidacionService {
         }
         resultado.getAdvertencias().addAll(validacionMonto.getAdvertencias());
 
-        // Validar tasas
         ResultadoValidacionDto validacionTasas = validarTasas(credito);
         if (!validacionTasas.getValido()) {
             resultado.getErrores().addAll(validacionTasas.getErrores());
             resultado.setValido(false);
         }
 
-        // Validar plazo
         ResultadoValidacionDto validacionPlazo = validarPlazo(credito);
         if (!validacionPlazo.getValido()) {
             resultado.getErrores().addAll(validacionPlazo.getErrores());
             resultado.setValido(false);
         }
 
-        // Calcular puntaje combinado
         Integer puntajeTotal = validacionMonto.getPuntaje() +
                 validacionTasas.getPuntaje() +
                 validacionPlazo.getPuntaje();
         resultado.setPuntaje(puntajeTotal);
 
-        // Validaciones adicionales
         if (credito.getFecha_desembolso() != null &&
                 credito.getFecha_desembolso().isBefore(LocalDate.now())) {
             resultado.agregarError("Fecha de desembolso no puede ser en el pasado");
@@ -219,7 +201,6 @@ public class ValidacionService implements IValidacionService {
 
         Double monto = credito.getMonto_principal();
 
-        // Validar límites generales
         if (monto < MONTO_MINIMO_CREDITO) {
             resultado.agregarError("Monto mínimo del crédito es S/ " + MONTO_MINIMO_CREDITO);
             puntaje += 30;
@@ -230,7 +211,6 @@ public class ValidacionService implements IValidacionService {
             puntaje += 50;
         }
 
-        // Validar relación con ingreso (si se proporciona cliente)
         if (cliente != null && cliente.getIngreso_mensual() != null) {
             Double ingresoAnual = cliente.getIngreso_mensual() * 12;
             Double relacionMontoIngreso = monto / ingresoAnual;
@@ -260,7 +240,6 @@ public class ValidacionService implements IValidacionService {
 
         Double tasa = credito.getTasa_anual();
 
-        // Validar límites de tasa
         if (tasa < TASA_MINIMA) {
             resultado.agregarError("Tasa mínima permitida es " + TASA_MINIMA + "%");
             puntaje += 30;
@@ -271,7 +250,6 @@ public class ValidacionService implements IValidacionService {
             puntaje += 50;
         }
 
-        // Validar tasas según tipo
         if (credito.getTasadto() != null) {
             String tipoTasa = credito.getTasadto().getTipo();
 
@@ -302,7 +280,6 @@ public class ValidacionService implements IValidacionService {
 
         Integer plazo = credito.getPlazo_meses();
 
-        // Validar límites de plazo
         if (plazo < PLAZO_MINIMO) {
             resultado.agregarError("Plazo mínimo es " + PLAZO_MINIMO + " meses");
             puntaje += 30;
@@ -313,7 +290,6 @@ public class ValidacionService implements IValidacionService {
             puntaje += 40;
         }
 
-        // Validar relación plazo-edad
         if (credito.getClientedto() != null &&
                 credito.getClientedto().getFecha_nacimiento() != null) {
 
@@ -342,17 +318,14 @@ public class ValidacionService implements IValidacionService {
             return resultado;
         }
 
-        // Validar estado de la unidad
         if (!"disponible".equals(unidad.getEstado()) && !"vendido".equals(unidad.getEstado())) {
             resultado.agregarError("La unidad no está disponible para venta");
         }
 
-        // Validar precio
         if (unidad.getPrecio_venta() == null || unidad.getPrecio_venta() <= 0) {
             resultado.agregarError("Precio de venta inválido");
         }
 
-        // Validar proyecto asociado
         if (unidad.getProyecto() == null) {
             resultado.agregarAdvertencia("Unidad sin proyecto asociado");
         }
@@ -371,7 +344,6 @@ public class ValidacionService implements IValidacionService {
             return resultado;
         }
 
-        // Validar datos básicos requeridos
         List<String> documentosRequeridos = new ArrayList<>();
 
         if (cliente.getDni() == null) {
@@ -397,7 +369,6 @@ public class ValidacionService implements IValidacionService {
     public ResultadoValidacionDto validarCompletitudSolicitud(CreditoDto credito) {
         ResultadoValidacionDto resultado = new ResultadoValidacionDto(true, "Solicitud completa");
 
-        // Lista de campos requeridos
         if (credito.getClientedto() == null) {
             resultado.agregarError("Datos del cliente requeridos");
         }
@@ -426,7 +397,6 @@ public class ValidacionService implements IValidacionService {
             resultado.agregarAdvertencia("Periodo de gracia no especificado (se usará valor por defecto)");
         }
 
-        // Validar que todos los IDs estén presentes
         if (credito.getClientedto() != null && credito.getClientedto().getId_cliente() == null) {
             resultado.agregarError("ID del cliente requerido");
         }
