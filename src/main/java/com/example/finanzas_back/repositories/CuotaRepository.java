@@ -22,11 +22,9 @@ public interface CuotaRepository extends JpaRepository<Cuota, Long> {
             @Param("fechaInicio") LocalDate fechaInicio,
             @Param("fechaFin") LocalDate fechaFin);
 
-    // ESTE MÉTODO SÍ SE USA en ReporteService.calcularCuotasVencidasUltimoMes()
     @Query("SELECT SUM(c.total_cuota) FROM Cuota c WHERE c.credito.id_credito = :idCredito AND c.estado = 'pendiente'")
     Double sumTotalPendienteByCredito(@Param("idCredito") Long idCredito);
 
-    // ESTE MÉTODO SÍ SE USA en ReporteService (implícitamente)
     @Query("SELECT c FROM Cuota c WHERE c.credito.id_credito = :idCredito AND c.numero_cuota = :numeroCuota")
     Cuota findByCreditoIdAndNumeroCuota(@Param("idCredito") Long idCredito, @Param("numeroCuota") Integer numeroCuota);
 }

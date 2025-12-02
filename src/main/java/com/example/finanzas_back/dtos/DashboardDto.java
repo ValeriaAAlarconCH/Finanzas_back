@@ -14,28 +14,23 @@ import java.util.Map;
 @NoArgsConstructor
 @AllArgsConstructor
 public class DashboardDto implements Serializable {
-    // Resumen general
     private Integer totalClientes;
     private Integer totalCreditos;
     private Integer creditosActivos;
     private Double carteraVigente;
     private Double carteraVencida;
 
-    // Métricas del día
     private Integer pagosHoy;
     private Double montoPagadoHoy;
     private Integer cuotasVencidasHoy;
     private Double montoVencidoHoy;
 
-    // Alertas
     private List<AlertaDto> alertas;
 
-    // Gráficos datos
     private Map<String, Double> distribucionCartera;
-    private List<MetricaMensualDto> tendenciaCobranza; // CORREGIDO: usa MetricaMensualDto
-    private List<MetricaMensualDto> tendenciaCreditos; // CORREGIDO: usa MetricaMensualDto
+    private List<MetricaMensualDto> tendenciaCobranza;
+    private List<MetricaMensualDto> tendenciaCreditos;
 
-    // KPIs
     private Double indiceMorosidad;
     private Double eficienciaCobranza;
     private Double tasaCancelacion;

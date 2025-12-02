@@ -27,41 +27,34 @@ public class CalculoFinancieroService implements ICalculoFinancieroService {
     @Autowired
     private ModelMapper modelMapper;
 
-    // Constantes para cálculos
     private static final Double SEGURO_DESGRAVAMEN_PORCENTAJE = 0.00035; // 0.035% mensual
     private static final Double SEGURO_INMUEBLE_PORCENTAJE = 0.00025;    // 0.025% mensual
     private static final Integer DIAS_POR_MES = 30;
 
     @Override
     public List<CuotaDto> generarCronogramaFrances(CreditoDto creditoDto) {
-        // Validaciones iniciales
         if (creditoDto == null) {
             throw new RuntimeException("El crédito no puede ser nulo");
         }
 
-        // 1. Obtener datos del crédito
         Double monto = creditoDto.getMonto_principal();
         Double tasaAnual = creditoDto.getTasa_anual();
         Integer plazo = creditoDto.getPlazo_meses();
         Integer mesesGracia = creditoDto.getMeses_gracia() != null ? creditoDto.getMeses_gracia() : 0;
 
-        // Obtener tipo de gracia
         String tipoGracia = "parcial"; // valor por defecto
         if (creditoDto.getGraciadto() != null && creditoDto.getGraciadto().getTipo() != null) {
             tipoGracia = creditoDto.getGraciadto().getTipo();
         }
 
-        // 2. Calcular tasa periódica (mensual)
         Double tasaPeriodica = calcularTasaPeriodica(
                 tasaAnual,
                 creditoDto.getTasadto() != null ? creditoDto.getTasadto().getTipo() : "efectiva",
                 creditoDto.getCapitalizaciondto()
         );
 
-        // 3. Calcular cuota constante (metodo francés)
         Double cuotaConstante = calcularCuotaConstante(monto, tasaPeriodica, plazo - mesesGracia);
 
-        // 4. Generar cronograma base
         List<CuotaDto> cronograma = new ArrayList<>();
         Double saldo = monto;
         LocalDate fechaCuota = creditoDto.getFecha_desembolso() != null ?
@@ -74,27 +67,20 @@ public class CalculoFinancieroService implements ICalculoFinancieroService {
             cuota.setDias_periodo(DIAS_POR_MES);
             cuota.setSaldo_inicial(saldo);
 
-            // Calcular interés del periodo
             Double interes = saldo * tasaPeriodica;
             cuota.setInteres_programado(interes);
 
-            // Calcular amortización de capital
             Double amortizacion;
             if (i <= mesesGracia && "parcial".equals(tipoGracia)) {
-                // Periodo de gracia parcial: solo se pagan intereses
                 amortizacion = 0.0;
             } else if (i <= mesesGracia && "total".equals(tipoGracia)) {
-                // Periodo de gracia total: no se paga nada
                 amortizacion = 0.0;
                 interes = 0.0;
                 cuota.setInteres_programado(0.0);
             } else {
-                // Periodo normal: se paga capital + intereses
-                // Ajustar para meses después del periodo de gracia
                 int periodoPago = i - mesesGracia;
                 if (periodoPago <= 0) periodoPago = 1;
 
-                // Usar la cuota constante calculada
                 amortizacion = cuotaConstante - interes;
                 if (amortizacion > saldo) {
                     amortizacion = saldo;
@@ -103,23 +89,19 @@ public class CalculoFinancieroService implements ICalculoFinancieroService {
 
             cuota.setCapital_programado(amortizacion);
 
-            // Calcar seguros (usando ModelMapper ahora)
             Double seguroDesgravamen = calcularSeguroDesgravamen(saldo, SEGURO_DESGRAVAMEN_PORCENTAJE);
             Double seguroInmueble = calcularSeguroInmueble(saldo, SEGURO_INMUEBLE_PORCENTAJE);
             Double otrosCargos = seguroDesgravamen + seguroInmueble;
             cuota.setOtros_cargos(otrosCargos);
 
-            // Calcular total de la cuota
             Double totalCuota = amortizacion + interes + otrosCargos;
 
-            // Ajustar para periodo de gracia total
             if (i <= mesesGracia && "total".equals(tipoGracia)) {
                 totalCuota = 0.0;
             }
 
             cuota.setTotal_cuota(totalCuota);
 
-            // Actualizar saldo
             saldo -= amortizacion;
             if (saldo < 0) saldo = 0.0;
             cuota.setSaldo_final(saldo);
@@ -186,7 +168,6 @@ public class CalculoFinancieroService implements ICalculoFinancieroService {
             throw new RuntimeException("Datos insuficientes para calcular indicadores");
         }
 
-        // Calcular flujos de caja (incluye el desembolso inicial negativo)
         List<Double> flujos = new ArrayList<>();
         flujos.add(-creditoDto.getMonto_principal()); // Desembolso inicial (negativo)
 
@@ -194,7 +175,6 @@ public class CalculoFinancieroService implements ICalculoFinancieroService {
             flujos.add(cuota.getTotal_cuota());
         }
 
-        // Convertir flujos a formato para cálculos
         List<CuotaDto> flujosParaCalculo = new ArrayList<>();
         for (int i = 0; i < flujos.size(); i++) {
             CuotaDto cuotaFlujo = new CuotaDto();
@@ -203,11 +183,9 @@ public class CalculoFinancieroService implements ICalculoFinancieroService {
             flujosParaCalculo.add(cuotaFlujo);
         }
 
-        // Calcular TIR
         Double tir = calcularTIR(flujosParaCalculo);
         indicador.setTIR(tir);
 
-        // Calcular VAN usando la tasa del crédito como tasa de descuento
         Double tasaDescuento = calcularTasaPeriodica(
                 creditoDto.getTasa_anual(),
                 creditoDto.getTasadto() != null ? creditoDto.getTasadto().getTipo() : "efectiva",
@@ -216,7 +194,6 @@ public class CalculoFinancieroService implements ICalculoFinancieroService {
         Double van = calcularVAN(flujosParaCalculo, tasaDescuento);
         indicador.setVAN(van);
 
-        // Calcular TCEA y TREA
         Double periodosPorAno = creditoDto.getCapitalizaciondto() != null ?
                 creditoDto.getCapitalizaciondto().getPeriodos_por_ano() : 12.0;
         Double tcea = calcularTCEA(tir, periodosPorAno.intValue());
@@ -224,7 +201,6 @@ public class CalculoFinancieroService implements ICalculoFinancieroService {
         indicador.setTCEA(tcea);
         indicador.setTREA(trea);
 
-        // Calcular duración y convexidad (solo con el cronograma real)
         Double duracion = calcularDuracion(cronograma, tasaDescuento);
         Double duracionModificada = calcularDuracionModificada(duracion, tasaDescuento);
         Double convexidad = calcularConvexidad(cronograma, tasaDescuento);
@@ -262,14 +238,12 @@ public class CalculoFinancieroService implements ICalculoFinancieroService {
             return 0.0;
         }
 
-        // Metodo de bisección para calcular TIR
         Double tasaBaja = 0.0;
         Double tasaAlta = 1.0; // 100%
         Double precision = 0.0001; // 0.01%
         Double vanBaja = calcularVAN(flujos, tasaBaja);
         Double vanAlta = calcularVAN(flujos, tasaAlta);
 
-        // Si los signos son iguales, ajustar tasas
         int intentos = 0;
         while (vanBaja * vanAlta > 0 && intentos < 10) {
             if (vanBaja > 0) {
@@ -282,7 +256,6 @@ public class CalculoFinancieroService implements ICalculoFinancieroService {
             intentos++;
         }
 
-        // Bisección
         Double tasaMedia = (tasaBaja + tasaAlta) / 2;
         Double vanMedia = calcularVAN(flujos, tasaMedia);
 
@@ -299,7 +272,7 @@ public class CalculoFinancieroService implements ICalculoFinancieroService {
             vanMedia = calcularVAN(flujos, tasaMedia);
         }
 
-        return tasaMedia * 100; // Retornar en porcentaje
+        return tasaMedia * 100;
     }
 
     @Override
@@ -315,7 +288,6 @@ public class CalculoFinancieroService implements ICalculoFinancieroService {
 
     @Override
     public Double calcularTREA(Double tir, Integer periodosPorAno) {
-        // Para créditos hipotecarios, TREA es similar a TCEA
         return calcularTCEA(tir, periodosPorAno);
     }
 
@@ -394,15 +366,12 @@ public class CalculoFinancieroService implements ICalculoFinancieroService {
 
             if (i < mesesGracia) {
                 if ("total".equalsIgnoreCase(tipoGracia)) {
-                    // Gracia total: no se paga nada
                     cuotaModificada.setCapital_programado(0.0);
                     cuotaModificada.setInteres_programado(0.0);
                     cuotaModificada.setOtros_cargos(0.0);
                     cuotaModificada.setTotal_cuota(0.0);
                 } else {
-                    // Gracia parcial: solo se pagan intereses y seguros
                     cuotaModificada.setCapital_programado(0.0);
-                    // Intereses y seguros se mantienen
                     cuotaModificada.setTotal_cuota(
                             cuotaModificada.getInteres_programado() +
                                     cuotaModificada.getOtros_cargos()

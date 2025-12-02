@@ -48,10 +48,8 @@ public class ReporteService implements IReporteService {
         reporte.setPeriodoInicio(fechaInicio);
         reporte.setPeriodoFin(fechaFin);
 
-        // Obtener todos los créditos en el período
         List<Credito> creditos = creditoRepository.findAll();
 
-        // Filtrar por fecha si es necesario
         if (fechaInicio != null && fechaFin != null) {
             creditos = creditos.stream()
                     .filter(c -> !c.getFecha_desembolso().isBefore(fechaInicio) &&
@@ -59,7 +57,6 @@ public class ReporteService implements IReporteService {
                     .collect(Collectors.toList());
         }
 
-        // Calcular estadísticas
         int total = creditos.size();
         int aprobados = (int) creditos.stream().filter(c -> "aprobado".equals(c.getEstado())).count();
         int rechazados = (int) creditos.stream().filter(c -> "rechazado".equals(c.getEstado())).count();
@@ -70,7 +67,6 @@ public class ReporteService implements IReporteService {
                 .mapToDouble(Credito::getMonto_principal)
                 .sum();
 
-        // Usar el método del repositorio para sumar pagos
         Double montoRecuperado = 0.0;
         for (Credito credito : creditos) {
             Double sumPagos = pagoRepository.sumMontoByCreditoId(credito.getId_credito());
@@ -81,14 +77,12 @@ public class ReporteService implements IReporteService {
 
         Double tasaAprobacion = total > 0 ? (aprobados * 100.0) / total : 0.0;
 
-        // Créditos recientes (últimos 10)
         List<CreditoDto> creditosRecientes = creditos.stream()
                 .sorted((c1, c2) -> c2.getFecha_desembolso().compareTo(c1.getFecha_desembolso()))
                 .limit(10)
                 .map(c -> modelMapper.map(c, CreditoDto.class))
                 .collect(Collectors.toList());
 
-        // Créditos por entidad
         Map<String, Integer> creditosPorEntidad = new HashMap<>();
         for (Credito credito : creditos) {
             if (credito.getEntidad() != null) {
@@ -98,7 +92,6 @@ public class ReporteService implements IReporteService {
             }
         }
 
-        // Montos por moneda
         Map<String, Double> montosPorMoneda = new HashMap<>();
         for (Credito credito : creditos) {
             if (credito.getMoneda() != null) {
@@ -108,10 +101,8 @@ public class ReporteService implements IReporteService {
             }
         }
 
-        // Tendencias mensuales
         List<TrendDataDto> tendenciaMensual = calcularTendenciaCreditosMensual();
 
-        // Establecer valores en el reporte
         reporte.setTotalCreditos(total);
         reporte.setCreditosAprobados(aprobados);
         reporte.setCreditosRechazados(rechazados);
@@ -135,7 +126,6 @@ public class ReporteService implements IReporteService {
         reporte.setPeriodoInicio(fechaInicio);
         reporte.setPeriodoFin(fechaFin);
 
-        // Obtener pagos en el período usando el método del repositorio
         List<Pago> pagos;
         if (fechaInicio != null && fechaFin != null) {
             pagos = pagoRepository.findByFechaBetween(fechaInicio, fechaFin);
@@ -143,14 +133,12 @@ public class ReporteService implements IReporteService {
             pagos = pagoRepository.findAll();
         }
 
-        // Calcular estadísticas
         int total = pagos.size();
         Double montoTotal = pagos.stream()
                 .mapToDouble(Pago::getMonto)
                 .sum();
         Double promedio = total > 0 ? montoTotal / total : 0.0;
 
-        // Pagos puntuales vs con mora (simplificado)
         int puntuales = (int) pagos.stream()
                 .filter(p -> {
                     // Verificar si el pago fue puntual
@@ -160,16 +148,14 @@ public class ReporteService implements IReporteService {
                 .count();
         int conMora = total - puntuales;
 
-        Double tasaCobranza = 0.0; // Esto requeriría cálculo más complejo
+        Double tasaCobranza = 0.0;
 
-        // Pagos recientes
         List<PagoDto> pagosRecientes = pagos.stream()
                 .sorted((p1, p2) -> p2.getFecha_pago().compareTo(p1.getFecha_pago()))
                 .limit(10)
                 .map(p -> modelMapper.map(p, PagoDto.class))
                 .collect(Collectors.toList());
 
-        // Pagos por método
         Map<String, Integer> pagosPorMetodo = new HashMap<>();
         for (Pago pago : pagos) {
             String metodo = pago.getMetodo_pago();
@@ -179,7 +165,6 @@ public class ReporteService implements IReporteService {
             }
         }
 
-        // Pagos por día de la semana
         Map<String, Double> pagosPorDia = new HashMap<>();
         String[] dias = {"LUNES", "MARTES", "MIÉRCOLES", "JUEVES", "VIERNES", "SÁBADO", "DOMINGO"};
         for (String dia : dias) {
@@ -192,10 +177,8 @@ public class ReporteService implements IReporteService {
             pagosPorDia.put(diaSemana, montoActual + pago.getMonto());
         }
 
-        // Top clientes por pagos
         List<TopClienteDto> topClientes = calcularTopClientesPagos(pagos);
 
-        // Establecer valores
         reporte.setTotalPagos(total);
         reporte.setMontoTotalPagado(montoTotal);
         reporte.setPromedioPago(promedio);
@@ -214,26 +197,21 @@ public class ReporteService implements IReporteService {
     public DashboardDto obtenerDashboard() {
         DashboardDto dashboard = new DashboardDto();
 
-        // Obtener datos generales
         List<Cliente> clientes = clienteRepository.findAll();
         List<Credito> creditos = creditoRepository.findAll();
         List<Cuota> cuotas = cuotaRepository.findAll();
 
-        // Totales
         dashboard.setTotalClientes(clientes.size());
         dashboard.setTotalCreditos(creditos.size());
 
-        // Créditos activos
         List<Credito> creditosActivos = creditoRepository.findByEstado("activo");
         dashboard.setCreditosActivos(creditosActivos.size());
 
-        // Cartera vigente y vencida
         Double carteraVigente = calcularCarteraVigente();
         Double carteraVencida = calcularCarteraVencida();
         dashboard.setCarteraVigente(carteraVigente);
         dashboard.setCarteraVencida(carteraVencida);
 
-        // Métricas del día
         LocalDate hoy = LocalDate.now();
         List<Pago> pagosHoy = pagoRepository.findByFechaBetween(hoy, hoy);
         dashboard.setPagosHoy(pagosHoy.size());
@@ -243,7 +221,6 @@ public class ReporteService implements IReporteService {
                 .sum();
         dashboard.setMontoPagadoHoy(montoPagadoHoy);
 
-        // Cuotas vencidas hoy usando el método del repositorio
         List<Cuota> cuotasVencidas = cuotaRepository.findByFechaVencimientoBetween(hoy, hoy);
         cuotasVencidas = cuotasVencidas.stream()
                 .filter(c -> "vencida".equals(c.getEstado()))
@@ -256,11 +233,9 @@ public class ReporteService implements IReporteService {
                 .sum();
         dashboard.setMontoVencidoHoy(montoVencidoHoy);
 
-        // Alertas
         List<AlertaDto> alertas = generarAlertas();
         dashboard.setAlertas(alertas);
 
-        // Datos para gráficos
         Map<String, Double> distribucionCartera = calcularDistribucionCartera();
         dashboard.setDistribucionCartera(distribucionCartera);
 
@@ -270,7 +245,6 @@ public class ReporteService implements IReporteService {
         List<MetricaMensualDto> tendenciaCreditos = calcularTendenciaCreditos();
         dashboard.setTendenciaCreditos(tendenciaCreditos);
 
-        // KPIs
         Map<String, Double> kpis = calcularKPIs();
         dashboard.setIndiceMorosidad(kpis.getOrDefault("indiceMorosidad", 0.0));
         dashboard.setEficienciaCobranza(kpis.getOrDefault("eficienciaCobranza", 0.0));
@@ -284,27 +258,23 @@ public class ReporteService implements IReporteService {
     public Map<String, Double> calcularKPIs() {
         Map<String, Double> kpis = new HashMap<>();
 
-        // Índice de morosidad
         Double carteraVencida = calcularCarteraVencida();
         Double carteraTotal = calcularCarteraTotal();
         Double indiceMorosidad = carteraTotal > 0 ? (carteraVencida * 100) / carteraTotal : 0.0;
         kpis.put("indiceMorosidad", indiceMorosidad);
 
-        // Eficiencia de cobranza
         Double pagosUltimoMes = calcularPagosUltimoMes();
         Double cuotasVencidasUltimoMes = calcularCuotasVencidasUltimoMes();
         Double eficienciaCobranza = cuotasVencidasUltimoMes > 0 ?
                 (pagosUltimoMes * 100) / cuotasVencidasUltimoMes : 100.0;
         kpis.put("eficienciaCobranza", eficienciaCobranza);
 
-        // Tasa de cancelación
         Long creditosCancelados = creditoRepository.countCreditosActivosByCliente(1L); // Ejemplo
         Long creditosTotales = (long) creditoRepository.findAll().size();
         Double tasaCancelacion = creditosTotales > 0 ?
                 (creditosCancelados * 100.0) / creditosTotales : 0.0;
         kpis.put("tasaCancelacion", tasaCancelacion);
 
-        // Rotación de cartera
         Double montoRecuperadoAnual = calcularMontoRecuperadoAnual();
         Double carteraPromedio = calcularCarteraPromedio();
         Double rotacionCartera = carteraPromedio > 0 ? montoRecuperadoAnual / carteraPromedio : 0.0;
@@ -313,7 +283,6 @@ public class ReporteService implements IReporteService {
         return kpis;
     }
 
-    // Métodos auxiliares privados
     private Double calcularCarteraVigente() {
         List<Credito> creditosActivos = creditoRepository.findByEstado("activo");
         return creditosActivos.stream()
@@ -322,7 +291,6 @@ public class ReporteService implements IReporteService {
     }
 
     private Double calcularCarteraVencida() {
-        // Usar el método del repositorio para sumar cuotas vencidas
         List<Cuota> cuotasVencidas = cuotaRepository.findAll().stream()
                 .filter(c -> "vencida".equals(c.getEstado()))
                 .collect(Collectors.toList());
@@ -352,7 +320,6 @@ public class ReporteService implements IReporteService {
         LocalDate fin = LocalDate.now();
         LocalDate inicio = fin.minusMonths(1);
 
-        // Usar el método del repositorio
         List<Cuota> cuotas = cuotaRepository.findByFechaVencimientoBetween(inicio, fin);
         cuotas = cuotas.stream()
                 .filter(c -> "vencida".equals(c.getEstado()))
@@ -374,7 +341,6 @@ public class ReporteService implements IReporteService {
     }
 
     private Double calcularCarteraPromedio() {
-        // Promedio de los últimos 12 meses
         List<Double> carterasMensuales = new ArrayList<>();
         for (int i = 0; i < 12; i++) {
             LocalDate mes = LocalDate.now().minusMonths(i);
@@ -391,7 +357,6 @@ public class ReporteService implements IReporteService {
     private List<AlertaDto> generarAlertas() {
         List<AlertaDto> alertas = new ArrayList<>();
 
-        // Alertas de vencimiento (próximos 3 días)
         LocalDate hoy = LocalDate.now();
         LocalDate tresDias = hoy.plusDays(3);
 
@@ -413,7 +378,6 @@ public class ReporteService implements IReporteService {
             alertas.add(alerta);
         }
 
-        // Alertas de mora (más de 15 días)
         List<Cuota> cuotasVencidas = cuotaRepository.findAll().stream()
                 .filter(c -> "vencida".equals(c.getEstado()))
                 .filter(c -> ChronoUnit.DAYS.between(c.getFecha_vencimiento(), hoy) > 15)
@@ -436,7 +400,6 @@ public class ReporteService implements IReporteService {
     private Map<String, Double> calcularDistribucionCartera() {
         Map<String, Double> distribucion = new HashMap<>();
 
-        // Por estado de crédito
         List<Credito> creditos = creditoRepository.findAll();
 
         Map<String, Double> porEstado = creditos.stream()
@@ -447,7 +410,6 @@ public class ReporteService implements IReporteService {
 
         distribucion.putAll(porEstado);
 
-        // Por moneda
         Map<String, Double> porMoneda = creditos.stream()
                 .filter(c -> c.getMoneda() != null)
                 .collect(Collectors.groupingBy(
@@ -537,7 +499,6 @@ public class ReporteService implements IReporteService {
     }
 
     private List<TopClienteDto> calcularTopClientesPagos(List<Pago> pagos) {
-        // Agrupar pagos por cliente
         Map<Long, Double> pagosPorCliente = new HashMap<>();
 
         for (Pago pago : pagos) {
@@ -548,7 +509,6 @@ public class ReporteService implements IReporteService {
             }
         }
 
-        // Ordenar y tomar top 5
         return pagosPorCliente.entrySet().stream()
                 .sorted((e1, e2) -> e2.getValue().compareTo(e1.getValue()))
                 .limit(5)
@@ -568,13 +528,11 @@ public class ReporteService implements IReporteService {
                 .collect(Collectors.toList());
     }
 
-    // Implementar métodos pendientes
     @Override
     public ReporteMorosidadDto generarReporteMorosidad() {
         ReporteMorosidadDto reporte = new ReporteMorosidadDto();
         reporte.setFechaGeneracion(LocalDate.now());
 
-        // Cálculos simplificados
         Double carteraVencida = calcularCarteraVencida();
         Double carteraTotal = calcularCarteraTotal();
 
@@ -582,11 +540,9 @@ public class ReporteService implements IReporteService {
         reporte.setCarteraTotal(carteraTotal);
         reporte.setIndiceMorosidad(carteraTotal > 0 ? (carteraVencida * 100) / carteraTotal : 0.0);
 
-        // Clientes morosos
         List<Cliente> clientes = clienteRepository.findAll();
         reporte.setTotalClientes(clientes.size());
 
-        // Esto sería más complejo en producción
         reporte.setClientesMorosos(5); // Ejemplo
         reporte.setTasaMorosidad(clientes.size() > 0 ? (5.0 * 100) / clientes.size() : 0.0);
 
@@ -601,11 +557,9 @@ public class ReporteService implements IReporteService {
         if (cliente != null) {
             estadisticas.setCliente(modelMapper.map(cliente, ClienteDto.class));
 
-            // Obtener créditos del cliente
             List<Credito> creditos = creditoRepository.findByClienteId(idCliente);
             estadisticas.setTotalCreditos(creditos.size());
 
-            // Cálculos adicionales
             estadisticas.setCreditosActivos((int) creditos.stream()
                     .filter(c -> "activo".equals(c.getEstado())).count());
             estadisticas.setCreditosCancelados((int) creditos.stream()
@@ -625,10 +579,8 @@ public class ReporteService implements IReporteService {
 
         ProyectoInmobiliario proyecto = proyectoRepository.findById(idProyecto).orElse(null);
         if (proyecto != null) {
-            // CORRECCIÓN: Usar el DTO correcto
             estadisticas.setProyecto(modelMapper.map(proyecto, ProyectoInmobiliarioDto.class));
 
-            // Obtener unidades del proyecto
             List<UnidadInmobiliaria> unidades = unidadInmobiliariaRepository.findAll().stream()
                     .filter(u -> u.getProyecto() != null && u.getProyecto().getId_proyecto().equals(idProyecto))
                     .collect(Collectors.toList());
@@ -653,7 +605,6 @@ public class ReporteService implements IReporteService {
                     .mapToDouble(UnidadInmobiliaria::getPrecio_venta)
                     .sum());
 
-            // Créditos asociados
             List<Credito> creditosAsociados = creditoRepository.findAll().stream()
                     .filter(c -> c.getUnidad() != null &&
                             c.getUnidad().getProyecto() != null &&
@@ -665,12 +616,10 @@ public class ReporteService implements IReporteService {
                     .mapToDouble(Credito::getMonto_principal)
                     .sum());
 
-            // Tasa de venta
             if (unidades.size() > 0) {
                 estadisticas.setTasaVenta((estadisticas.getUnidadesVendidas() * 100.0) / unidades.size());
             }
 
-            // Unidades más vendidas (top 5 por precio)
             estadisticas.setUnidadesMasVendidas(unidades.stream()
                     .filter(u -> "vendido".equals(u.getEstado()))
                     .sorted((u1, u2) -> Double.compare(u2.getPrecio_venta(), u1.getPrecio_venta()))
@@ -684,19 +633,16 @@ public class ReporteService implements IReporteService {
 
     @Override
     public byte[] exportarReporteCreditosExcel(LocalDate fechaInicio, LocalDate fechaFin) {
-        // Implementación pendiente - retornar bytes vacíos por ahora
         return new byte[0];
     }
 
     @Override
     public byte[] exportarEstadoCuentaPdf(Long idCredito) {
-        // Implementación pendiente - retornar bytes vacíos por ahora
         return new byte[0];
     }
 
     @Override
     public byte[] exportarCronogramaPdf(Long idCredito) {
-        // Implementación pendiente - retornar bytes vacíos por ahora
         return new byte[0];
     }
 }

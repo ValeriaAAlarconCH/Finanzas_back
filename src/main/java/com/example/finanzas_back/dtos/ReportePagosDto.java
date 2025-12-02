@@ -27,5 +27,5 @@ public class ReportePagosDto implements Serializable {
     private List<PagoDto> pagosRecientes;
     private Map<String, Integer> pagosPorMetodo;
     private Map<String, Double> pagosPorDia;
-    private List<TopClienteDto> topClientesPagos; // CORREGIDO: usa TopClienteDto
+    private List<TopClienteDto> topClientesPagos;
 }

@@ -36,7 +36,6 @@ public class PagoManagementService implements IPagoManagementService {
     @Autowired
     private ModelMapper modelMapper;
 
-    // Constantes
     private static final Double TASA_MORA_DIARIA = 0.0005; // 0.05% diario
     private static final Double TASA_INTERES_COMPENSATORIO = 0.0002; // 0.02% diario
     private static final Double PORCENTAJE_ENDEUDAMIENTO_MAXIMO = 0.40; // 40% del ingreso
@@ -45,28 +44,23 @@ public class PagoManagementService implements IPagoManagementService {
     @Transactional
     public ResultadoPagoDto registrarPago(PagoDto pagoDto, List<Long> idsCuotas) {
         try {
-            // 1. Guardar el pago
             Pago pago = modelMapper.map(pagoDto, Pago.class);
             Pago pagoGuardado = pagoRepository.save(pago);
             PagoDto pagoGuardadoDto = modelMapper.map(pagoGuardado, PagoDto.class);
 
-            // 2. Aplicar el pago a las cuotas
             List<PagoCuotaDto> aplicaciones = aplicarPagoACuotas(
                     pagoGuardado.getId_pago(),
                     idsCuotas,
                     pagoDto.getMonto()
             );
 
-            // 3. Calcular resumen
             Double montoAplicado = aplicaciones.stream()
                     .mapToDouble(PagoCuotaDto::getMonto_aplicado)
                     .sum();
             Double montoExcedente = pagoDto.getMonto() - montoAplicado;
 
-            // 4. Actualizar estado de las cuotas pagadas
             actualizarEstadoCuotas(idsCuotas);
 
-            // 5. Crear respuesta
             ResultadoPagoDto resultado = new ResultadoPagoDto();
             resultado.setPago(pagoGuardadoDto);
             resultado.setAplicaciones(aplicaciones);
@@ -87,20 +81,16 @@ public class PagoManagementService implements IPagoManagementService {
         List<PagoCuotaDto> aplicaciones = new ArrayList<>();
         Double montoRestante = montoTotal;
 
-        // Ordenar cuotas por fecha de vencimiento (más antiguas primero)
         List<Cuota> cuotas = cuotaRepository.findAllById(idsCuotas);
         cuotas.sort((c1, c2) -> c1.getFecha_vencimiento().compareTo(c2.getFecha_vencimiento()));
 
         for (Cuota cuota : cuotas) {
             if (montoRestante <= 0) break;
 
-            // Calcular deuda de la cuota (capital + interés + mora si hay)
             Double deudaCuota = calcularDeudaCuota(cuota);
 
-            // Determinar cuánto aplicar a esta cuota
             Double montoAplicar = Math.min(deudaCuota, montoRestante);
 
-            // Crear registro PagoCuota
             PagoCuota pagoCuota = new PagoCuota();
             pagoCuota.setIdPago(idPago);
             pagoCuota.setIdCuota(cuota.getId_cuota());
@@ -109,17 +99,14 @@ public class PagoManagementService implements IPagoManagementService {
 
             PagoCuota guardado = pagoCuotaRepository.save(pagoCuota);
 
-            // Actualizar saldo de la cuota
             actualizarSaldoCuota(cuota, montoAplicar);
 
-            // Agregar a la lista de aplicaciones
             PagoCuotaDto aplicacionDto = modelMapper.map(guardado, PagoCuotaDto.class);
             aplicaciones.add(aplicacionDto);
 
             montoRestante -= montoAplicar;
         }
 
-        // Si sobra monto, se considera pago adelantado
         if (montoRestante > 0) {
             aplicarPagoAdelantado(idPago, cuotas.get(0).getCredito().getId_credito(), montoRestante);
         }
@@ -133,15 +120,12 @@ public class PagoManagementService implements IPagoManagementService {
             return 0.0;
         }
 
-        // Si el pago es antes o en la fecha de vencimiento, no hay mora
         if (!fechaPago.isAfter(cuotaDto.getFecha_vencimiento())) {
             return 0.0;
         }
 
-        // Calcular días de mora
         long diasMora = ChronoUnit.DAYS.between(cuotaDto.getFecha_vencimiento(), fechaPago);
 
-        // Mora = (Capital pendiente * tasa diaria * días de mora)
         Double capitalPendiente = cuotaDto.getCapital_programado() != null ?
                 cuotaDto.getCapital_programado() : 0.0;
 
@@ -154,15 +138,12 @@ public class PagoManagementService implements IPagoManagementService {
             return 0.0;
         }
 
-        // Si el pago es en o antes de la fecha de vencimiento, no hay interés compensatorio
         if (!fechaPago.isAfter(cuotaDto.getFecha_vencimiento())) {
             return 0.0;
         }
 
-        // Calcular días de retraso
         long diasRetraso = ChronoUnit.DAYS.between(cuotaDto.getFecha_vencimiento(), fechaPago);
 
-        // Interés compensatorio = (Total cuota * tasa compensatoria * días de retraso)
         Double totalCuota = cuotaDto.getTotal_cuota() != null ?
                 cuotaDto.getTotal_cuota() : 0.0;
 
@@ -171,7 +152,6 @@ public class PagoManagementService implements IPagoManagementService {
 
     @Override
     public List<CuotaDto> recalcularCronogramaDespuesPago(Long idCredito, Double montoAdelantado) {
-        // Obtener crédito y cuotas pendientes
         Credito credito = creditoRepository.findById(idCredito)
                 .orElseThrow(() -> new RuntimeException("Crédito no encontrado"));
 
@@ -181,7 +161,6 @@ public class PagoManagementService implements IPagoManagementService {
             return new ArrayList<>();
         }
 
-        // Aplicar pago adelantado a las cuotas futuras
         List<CuotaDto> cronogramaRecalculado = new ArrayList<>();
         Double montoRestante = montoAdelantado;
 
@@ -190,21 +169,16 @@ public class PagoManagementService implements IPagoManagementService {
 
             CuotaDto cuotaDto = modelMapper.map(cuota, CuotaDto.class);
 
-            // Determinar cuánto del pago adelantado se aplica a esta cuota
             Double capitalCuota = cuota.getCapital_programado() != null ?
                     cuota.getCapital_programado() : 0.0;
 
             Double montoAplicar = Math.min(capitalCuota, montoRestante);
 
-            // Reducir el capital de la cuota
             cuotaDto.setCapital_programado(capitalCuota - montoAplicar);
 
-            // Recalcular interés (sobre el nuevo saldo)
             Double nuevoSaldo = cuota.getSaldo_inicial() - montoAplicar;
             if (nuevoSaldo < 0) nuevoSaldo = 0.0;
 
-            // TODO: Recalcular interés basado en el nuevo saldo
-            // Esto requeriría la tasa periódica del crédito
 
             cronogramaRecalculado.add(cuotaDto);
             montoRestante -= montoAplicar;
@@ -220,7 +194,6 @@ public class PagoManagementService implements IPagoManagementService {
 
         CreditoDto creditoDto = modelMapper.map(credito, CreditoDto.class);
 
-        // Obtener cuotas
         List<Cuota> todasCuotas = cuotaRepository.findByCreditoId(idCredito);
         List<CuotaDto> cuotasVencidas = new ArrayList<>();
         List<CuotaDto> cuotasPendientes = new ArrayList<>();
@@ -235,13 +208,8 @@ public class PagoManagementService implements IPagoManagementService {
             }
         }
 
-        // Obtener pagos del último mes - CORRECCIÓN: Usar el método correcto
         LocalDate fechaInicio = fechaCorte.minusMonths(1);
 
-        // Opción 1: Si el método existe
-        // List<Pago> pagos = pagoRepository.findByCreditoIdAndFechaBetween(idCredito, fechaInicio, fechaCorte);
-
-        // Opción 2: Filtrar manualmente si el método no existe
         List<Pago> todosPagos = pagoRepository.findByCreditoId(idCredito);
         List<Pago> pagos = todosPagos.stream()
                 .filter(p -> !p.getFecha_pago().isBefore(fechaInicio) && !p.getFecha_pago().isAfter(fechaCorte))
@@ -251,16 +219,13 @@ public class PagoManagementService implements IPagoManagementService {
                 .map(pago -> modelMapper.map(pago, PagoDto.class))
                 .toList();
 
-        // Calcular saldos
         Double saldoCapital = calcularSaldoCapital(todasCuotas);
         Double saldoInteres = calcularSaldoInteres(todasCuotas);
         Double saldoMora = calcularSaldoMora(cuotasVencidas);
         Double totalDeuda = saldoCapital + saldoInteres + saldoMora;
 
-        // Calcular resumen
         ResumenPagosDto resumen = calcularResumenPagos(todasCuotas);
 
-        // Crear estado de cuenta
         EstadoCuentaDto estadoCuenta = new EstadoCuentaDto();
         estadoCuenta.setCredito(creditoDto);
         estadoCuenta.setFechaCorte(fechaCorte);
@@ -286,10 +251,8 @@ public class PagoManagementService implements IPagoManagementService {
             return false;
         }
 
-        // Calcular cuota máxima permitida
         Double cuotaMaxima = calcularCuotaMaxima(ingresoMensual, PORCENTAJE_ENDEUDAMIENTO_MAXIMO);
 
-        // Verificar si la cuota propuesta es menor o igual a la máxima
         return montoCuotaPropuesta <= cuotaMaxima;
     }
 
@@ -306,26 +269,21 @@ public class PagoManagementService implements IPagoManagementService {
         return ingresoMensual * porcentajeEndeudamiento;
     }
 
-    // Métodos auxiliares privados
     private Double calcularDeudaCuota(Cuota cuota) {
         Double deuda = 0.0;
 
-        // Capital pendiente
         if (cuota.getCapital_programado() != null && cuota.getEstado().equals("pendiente")) {
             deuda += cuota.getCapital_programado();
         }
 
-        // Interés pendiente
         if (cuota.getInteres_programado() != null) {
             deuda += cuota.getInteres_programado();
         }
 
-        // Otros cargos
         if (cuota.getOtros_cargos() != null) {
             deuda += cuota.getOtros_cargos();
         }
 
-        // Si la cuota está vencida, calcular mora e interés compensatorio
         if (cuota.getEstado().equals("vencida")) {
             CuotaDto cuotaDto = modelMapper.map(cuota, CuotaDto.class);
             Double mora = calcularMora(cuotaDto, LocalDate.now());
@@ -340,14 +298,10 @@ public class PagoManagementService implements IPagoManagementService {
         Double deudaActual = calcularDeudaCuota(cuota);
 
         if (montoAplicado >= deudaActual) {
-            // Cuota completamente pagada
             cuota.setEstado("pagada");
             cuota.setSaldo_final(0.0);
         } else {
-            // Cuota pagada parcialmente
             cuota.setEstado("parcial");
-            // Actualizar saldos proporcionalmente
-            // TODO: Implementar lógica de distribución proporcional
         }
 
         cuotaRepository.save(cuota);
@@ -358,7 +312,6 @@ public class PagoManagementService implements IPagoManagementService {
             Cuota cuota = cuotaRepository.findById(idCuota)
                     .orElseThrow(() -> new RuntimeException("Cuota no encontrada: " + idCuota));
 
-            // Verificar si la cuota está completamente pagada
             Double deuda = calcularDeudaCuota(cuota);
             if (deuda <= 0) {
                 cuota.setEstado("pagada");
@@ -368,13 +321,11 @@ public class PagoManagementService implements IPagoManagementService {
     }
 
     private void aplicarPagoAdelantado(Long idPago, Long idCredito, Double montoAdelantado) {
-        // Buscar la próxima cuota pendiente
         List<Cuota> cuotasPendientes = cuotaRepository.findByCreditoIdAndEstado(idCredito, "pendiente");
 
         if (!cuotasPendientes.isEmpty()) {
             Cuota proximaCuota = cuotasPendientes.get(0);
 
-            // Crear registro de pago adelantado
             PagoCuota pagoAdelantado = new PagoCuota();
             pagoAdelantado.setIdPago(idPago);
             pagoAdelantado.setIdCuota(proximaCuota.getId_cuota());
@@ -383,7 +334,6 @@ public class PagoManagementService implements IPagoManagementService {
 
             pagoCuotaRepository.save(pagoAdelantado);
 
-            // Marcar como pago adelantado
             proximaCuota.setEstado("adelantado");
             cuotaRepository.save(proximaCuota);
         }
