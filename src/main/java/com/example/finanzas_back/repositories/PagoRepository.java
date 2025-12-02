@@ -23,7 +23,6 @@ public interface PagoRepository extends JpaRepository<Pago, Long> {
             @Param("fechaInicio") LocalDate fechaInicio,
             @Param("fechaFin") LocalDate fechaFin);
 
-    // MÉTODO FALTANTE: findByCreditoIdAndFechaBetween
     @Query("SELECT p FROM Pago p WHERE p.credito.id_credito = :idCredito " +
             "AND p.fecha_pago BETWEEN :fechaInicio AND :fechaFin " +
             "ORDER BY p.fecha_pago DESC")
